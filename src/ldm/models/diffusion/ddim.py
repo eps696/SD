@@ -65,7 +65,7 @@ class DDIMSampler(object):
         # this has to come in the same format as the conditioning, # e.g. as encoded tokens, ...
         **kwargs,
     ):
-# !!! breaks concat conditions, not really needed
+# !!! breaks concat conditions, and not really needed
         # if conditioning is not None:
             # if isinstance(conditioning, dict):
                 # cbs = conditioning[list(conditioning.keys())[0]].shape[0]
@@ -154,36 +154,21 @@ class DDIMSampler(object):
         if (unconditional_conditioning is None or unconditional_guidance_scale == 1.0):
             e_t = self.model.apply_model(x, t, c)
         else:
-
-# !!! concats for runwayml inpaint [multi prompt conditions needs more work a la k_forward_multiconditionable with cat/repeat interleaved..]
+# !!! concats for depth/inpaint models
             if isinstance(c, dict):
-                # if isinstance(c['c_crossattn'], list):
-                    # cond_count = c['c_crossattn'][0].shape[0]
-                # else:
-                    # cond_count = c['c_crossattn'].shape[0]
-                # print(' cond_count', cond_count)
                 c_in = dict()
                 for k in c:
                     if isinstance(c[k], list):
                         c_in[k] = [torch.cat([unconditional_conditioning[k][i], c[k][i]]) for i in range(len(c[k]))]
-                        # for i in range(len(c[k])):
-                            # c_tile = repeat(c[k][i], '1 ... -> bc ...', bc=cond_count) if c[k][i].shape[0]==1 else c[k][i]
-                            # c_in[k] = [torch.cat([unconditional_conditioning[k][i], c_tile])]
                     else:
                         c_in[k] = torch.cat([unconditional_conditioning[k], c[k]])
-                        # c_in[k] = torch.cat([unconditional_conditioning[k], repeat(c[k], '1 ... -> b ...', b=cond_count) if c[k].shape[0]==1 else c[k]])
-
             else:
-                # multi prompts in normal models [no dict] don't land here, so we can presume single prompt
                 c_in = torch.cat([unconditional_conditioning, c])
-            cond_count = 1
 
-            x_in = torch.cat([x] * (cond_count+1))
-            t_in = torch.cat([t] * (cond_count+1))
-            # print(x_in.shape, t_in.shape, c_in['c_concat'][0].shape, c_in['c_crossattn'][0].shape)
+            x_in = torch.cat([x] * 2)
+            t_in = torch.cat([t] * 2)
 
             e_t_uncond, e_t = self.model.apply_model(x_in, t_in, c_in).chunk(2)
-            # e_t_uncond, e_t = self.model.apply_model(x_in, t_in, c_in)
             e_t = e_t_uncond + unconditional_guidance_scale * (e_t - e_t_uncond)
 
         if score_corrector is not None:

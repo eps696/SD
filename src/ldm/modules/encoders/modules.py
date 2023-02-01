@@ -242,8 +242,6 @@ class FrozenOpenCLIPEmbedder(AbstractEncoder):
         assert layer in self.LAYERS
         model_path = os.path.join(model_dir, 'openclip', 'open_clip_pytorch_model.bin')
         model, _, _ = open_clip.create_model_and_transforms(arch, device=torch.device('cpu'), pretrained=model_path)
-        # model, _, _ = open_clip.create_model_and_transforms(arch, device=torch.device('cpu'), pretrained=version, cache_dir=os.path.join(model_dir, 'openclip'))
-        # model, _, _ = open_clip.create_model_and_transforms(arch, device=torch.device('cpu'), pretrained=version)
         del model.visual
         self.model = model
 

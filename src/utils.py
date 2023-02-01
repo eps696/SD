@@ -56,7 +56,7 @@ def slerp(v0, v1, x, DOT_THRESHOLD=0.9995):
 
 def load_model(cfg_path, model_path, maindir, embedding=None):
     cfg = OmegaConf.load(cfg_path)
-    cfg['model']['params']['cond_stage_config']['params'] = {'model_dir': os.path.join(maindir, 'models')}
+    cfg['model']['params']['cond_stage_config']['params'] = {'model_dir': os.path.join(maindir, 'models')} # to FrozenCLIPEmbedder
     with open(model_path,'rb') as f:
         model_bytes = f.read()
     pl_sd = torch.load(io.BytesIO(model_bytes), map_location='cpu')
@@ -253,6 +253,38 @@ def precision_cast(func: Callable):
                     return func(*args, **kwargs)
     return wrapper
 
+def read_latents(latents):
+    if latents is not None and os.path.isfile(latents):
+        key_latents = load_latents(latents)
+    elif latents is not None and os.path.isdir(latents):
+        key_latents = []
+        lat_list = file_list(latents, 'pkl')
+        for lat in lat_list: 
+            key_latent = load_latents(lat)
+            key_latents.append(key_latent)
+        if isinstance(key_latents[0], list):
+            key_latents = list(map(list, zip(*key_latents)))
+            for n in range(len(key_latents)):
+                key_latents[n] = torch.cat(key_latents[n])
+        else:
+            key_latents = torch.cat(key_latents)
+    else:
+        print(' No input latents found'); exit()
+    return key_latents
+    
+def load_latents(lat_file):
+    with open(lat_file, 'rb') as f:
+        key_lats = pickle.load(f)
+    idx_file = os.path.splitext(lat_file)[0] + '.txt'
+    if os.path.exists(idx_file): 
+        with open(idx_file) as f:
+            lat_idx = f.readline()
+            lat_idx = [int(l.strip()) for l in lat_idx.split(',') if '\n' not in l and len(l.strip())>0]
+        key_lats = list(key_lats) if isinstance(key_lats, list) or isinstance(key_lats, tuple) else [key_lats]
+        for n, key_lat in enumerate(key_lats):
+            key_lats[n] = torch.cat([key_lat[i].unsqueeze(0) for i in lat_idx])
+    return key_lats
+
 # = = = progress bar = = = 
 
 from shutil import get_terminal_size
@@ -324,7 +356,7 @@ class ProgressBar(object):
         sys.stdout.flush()
         self.start_time = time.time()
 
-    def upd(self, msg=None):
+    def upd(self, msg=None, uprows=0):
         self.completed += 1
         elapsed = time.time() - self.start_time + 0.0000000000001
         fps = self.completed / elapsed if elapsed>0 else 0
@@ -336,7 +368,7 @@ class ProgressBar(object):
             if msg is not None: fin_msg += '  ' + str(msg)
             mark_width = int(self.bar_width * percentage)
             bar_chars = 'X' * mark_width + '-' * (self.bar_width - mark_width) # - - -
-            sys.stdout.write('\033[2A') # cursor up 2 lines
+            sys.stdout.write('\033[%dA' % (uprows+2)) # cursor up 2 lines + extra if needed
             sys.stdout.write('\033[J')  # clean the output (remove extra chars since last display)
             try:
                 sys.stdout.write('[{}] {}/{}, rate {:.3g}s, time {}s, left {}s \n{}\n'.format(

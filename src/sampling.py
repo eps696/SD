@@ -24,7 +24,7 @@ TAGS_RE = re.compile('<.*?>')
 sd_concepts_url_fn = lambda concept: f'https://huggingface.co/sd-concepts-library/{concept}/resolve/main/'
 UNLIKELY_TOKENS = ['?', '°', '±', '?', '?', '?', 'µ', '·', '?', '?', '?', '»', '?', '?', '?',]
 
-def prompt_injects(prompt, embedding_folder, use_half=True):
+def prompt_injects(prompt, embedding_folder, model_dir='models', use_half=True):
     ''' Inject custom concept into a prompt '''
     def _next_token_for_concept():
         for token in UNLIKELY_TOKENS:
@@ -75,7 +75,7 @@ def prompt_injects(prompt, embedding_folder, use_half=True):
             prompt_injected = prompt_injected.replace(tag, tag_actual)
 
         # Merge the embeddings.
-        embedder = FrozenCLIPEmbedder().cuda()
+        embedder = FrozenCLIPEmbedder(model_dir=model_dir).cuda()
         EmbeddingManagerCls = partial(EmbeddingManager, embedder, ["*"])
 
         string_to_token_dict = {}

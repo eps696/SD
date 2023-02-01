@@ -16,11 +16,6 @@ import k_diffusion as K
 from ldm.models.diffusion.ddim import DDIMSampler
 from sampling import KCFGDenoiser, prompt_injects
 from utils import load_model, load_img, save_img, makemask, calc_size, txt_clean, read_txt, read_multitext, precision_cast, prep_midas, log_tokens, img_list, basename, progbar
-# try: # progress bar for notebooks 
-    # get_ipython().__class__.__name__
-    # from util.progress_bar import ProgressIPy as progbar
-# except: # normal console
-    # from util.progress_bar import ProgressBar as progbar
 
 samplers = ['ddim', 'klms', 'euler', 'euler_a', 'dpm_ada', 'dpm_fast', 'dpm2_a'] # 'heun', 'dpmpp_2s_a', 'dpm2', 'dpmpp_2m'
 models = { 
@@ -34,26 +29,29 @@ models = {
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--in_txt',   default=None, help='Text string or file to process')
+    # inputs & paths
+    parser.add_argument('-t',  '--in_txt',  default=None, help='Text string or file to process')
     parser.add_argument('-pre', '--prefix', default=None, help='Prefix for input text')
     parser.add_argument('-post', '--postfix', default=None, help='Postfix for input text')
-    parser.add_argument('-im', '--in_img',  default=None, help='input image or directory with images (supersedes width and height)')
-    parser.add_argument('-M', '--mask',     default=None, help='Path to input mask for inpainting mode (supersedes width and height)')
-    parser.add_argument('-inv', '--invert_mask', action='store_true')
+    parser.add_argument('-im', '--in_img',  default=None, help='input image or directory with images (overrides width and height)')
+    parser.add_argument('-M',  '--mask',    default=None, help='Path to input mask for inpainting mode (overrides width and height)')
     parser.add_argument('-em', '--embeds',  default='_in/embed', help='Path to directories with embeddings')
-    parser.add_argument('-o', '--out_dir',  default="_out", help="Output directory for generated images")
+    parser.add_argument('-o',  '--out_dir', default="_out", help="Output directory for generated images")
     parser.add_argument('-md', '--maindir', default='./', help='Main SD directory')
-    parser.add_argument('-sz', '--size',    default=None, help="image width, multiple of 32")
+    # mandatory params
     parser.add_argument('-m',  '--model',   default='15', choices=models.keys(), help="model version [15,15i,v2i,v2d,v21,v21v]")
     parser.add_argument('-sm', '--sampler', default='euler', choices=samplers)
     parser.add_argument('-nz', '--noiser',  default='default', choices=['default', 'karras', 'exponential', 'vp'])
     parser.add_argument(       '--vae',     default='ema', help='orig, ema, mse')
-    parser.add_argument('-C','--cfg_scale', default=7.5, type=float, help="prompt configuration scale")
-    parser.add_argument('-f', '--strength', default=0.75, type=float, help="strength for noising/unnoising. 0 = preserve img, 1 = replace it completely")
-    parser.add_argument('-s', '--steps',    default=50, type=int, help="number of diffusion steps")
+    parser.add_argument('-C','--cfg_scale', default=7.5, type=float, help="prompt guidance scale")
+    parser.add_argument('-f', '--strength', default=0.75, type=float, help="strength of image processing. 0 = preserve img, 1 = replace it completely")
+    parser.add_argument('-s',  '--steps',   default=50, type=int, help="number of diffusion steps")
     parser.add_argument('--precision',      default='autocast')
-    parser.add_argument('-S','--seed',      type=int, help="image seed")
-    parser.add_argument('-v', '--verbose',  action='store_true')
+    parser.add_argument('-S',  '--seed',    type=int, help="image seed")
+    # misc
+    parser.add_argument('-sz', '--size',    default=None, help="image width, multiple of 32")
+    parser.add_argument('-inv', '--invert_mask', action='store_true')
+    parser.add_argument('-v',  '--verbose', action='store_true')
     return parser.parse_args()
 
 SIGMA_MIN = 0.0292
@@ -61,6 +59,7 @@ SIGMA_MAX = 14.6146
 device = torch.device('cuda')
 
 def sd_setup(a):
+    if not hasattr(a, 'maindir'): a.maindir = './' # for external scripts
     model = load_model(*[os.path.join(a.maindir, d) for d in models[a.model][:2]], a.maindir)
     if model.parameterization == "v":
         try:
@@ -133,7 +132,7 @@ def sd_setup(a):
     def rnd_z(H, W):
         return torch.randn([1, model.channels, H, W], device=device) * sigmas[0] # [1,4,64,64] noise
     def txt_c(txt):
-        args = [txt] if a.embeds is None else prompt_injects(txt, a.embeds)
+        args = [txt] if not hasattr(a, 'embeds') or a.embeds is None else prompt_injects(txt, a.embeds, os.path.join(a.maindir, 'models')) # txt, emb_manager
         return model.get_learned_conditioning(*args)
 
     @precision_cast
@@ -231,7 +230,7 @@ def main():
             image = generate(z_, c_, cw=cws[i%len(cws)])
             
         save_img(image, 0, a.out_dir, filepath=file_out)
-        pbar.upd()
+        pbar.upd(uprows=1)
 
 
 if __name__ == '__main__':
