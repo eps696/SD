@@ -30,7 +30,7 @@ Install `xformers` library to increase performance. It makes possible to run SD 
 ```
 pip install git+https://github.com/facebookresearch/xformers.git
 ```
-Download Stable Diffusion ([1.5](https://huggingface.co/CompVis/stable-diffusion), [1.5-inpaint](https://huggingface.co/runwayml/stable-diffusion-inpainting), [2-inpaint](https://huggingface.co/stabilityai/stable-diffusion-2-inpainting), [2-depth](https://huggingface.co/stabilityai/stable-diffusion-2-depth), [2.1](https://huggingface.co/stabilityai/stable-diffusion-2-1-base), [2.1-v](https://huggingface.co/stabilityai/stable-diffusion-2-1)), [OpenCLIP], [custom VAE](https://huggingface.co/stabilityai/sd-vae-ft-ema-original), [CLIPseg], [MiDaS](https://github.com/isl-org/MiDaS) models, mostly converted to `float16` for faster loading, by the command below. Licensing info is available on their webpages.
+Download Stable Diffusion ([1.5](https://huggingface.co/CompVis/stable-diffusion), [1.5-inpaint](https://huggingface.co/runwayml/stable-diffusion-inpainting), [2-inpaint](https://huggingface.co/stabilityai/stable-diffusion-2-inpainting), [2-depth](https://huggingface.co/stabilityai/stable-diffusion-2-depth), [2.1](https://huggingface.co/stabilityai/stable-diffusion-2-1-base), [2.1-v](https://huggingface.co/stabilityai/stable-diffusion-2-1)), [OpenCLIP], [custom VAE](https://huggingface.co/stabilityai/sd-vae-ft-ema-original), [CLIPseg], [MiDaS](https://github.com/isl-org/MiDaS) models (mostly converted to `float16` for faster loading) by the command below. Licensing info is available on their webpages.
 ```
 python download.py
 ```
@@ -63,14 +63,15 @@ python src/latwalk.py -t yourfile.txt --size 1024-576
 ```
 python src/latwalk.py -t yourfile.txt -im _in/pix/bench2.jpg --mask _in/pix/mask/bench2_mask.jpg 
 ```
-Interpolated videos may be further smoothed out with [FILM](https://github.com/google-research/frame-interpolation). 
-Text prompts may include [textual inversion] embeddings (e.g. `<depthmap>`) and weights (like `good prompt :1 | also good prompt :1 | bad prompt :-0.5`). The latter may degrade the overall accuracy though. 
+Other options can be seen by running these scripts with `--help` option.  
+Interpolated videos may be further smoothed out with [FILM](https://github.com/google-research/frame-interpolation).  
+Text prompts may include [textual inversion] embeddings (e.g. `<depthmap>`) and weights (like `good prompt :1 | also good prompt :1 | bad prompt :-0.5`). The latter may degrade overall accuracy though. 
 
-There are also Windows bat-files, slightly simplifying the commands. 
+There are also Windows bat-files, slightly simplifying and automating the commands. 
 
 ## Credits
 
-It's quite to hard to mention all who made the current revolution in visual creativity possible. Check the inline links above for some of those. 
+It's quite hard to mention all who made the current revolution in visual creativity possible. Check the inline links above for some of those. 
 Huge respect to the people behind [Stable Diffusion], [InvokeAI], [Deforum] and the whole open-source movement.
 
 [Stable Diffusion]: <https://github.com/CompVis/stable-diffusion>
