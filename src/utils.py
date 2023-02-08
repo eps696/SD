@@ -29,7 +29,6 @@ def calc_size(size, model, verbose=True):
     size = [int(s) for s in size.split('-')]
     if len(size)==1: size = size * 2
     w, h = map(lambda x: x - x % 8, size)  # resize to integer multiple of 8
-    # return size[0], size[1] # width, height
     return w, h
 
 def lerp(v0, v1, x):
@@ -54,7 +53,7 @@ def slerp(v0, v1, x, DOT_THRESHOLD=0.9995):
         v2 = s0 * v0 + s1 * v1
     return v2
 
-def load_model(cfg_path, model_path, maindir, embedding=None):
+def load_model(cfg_path, model_path, maindir, embedding=None, use_half=True):
     cfg = OmegaConf.load(cfg_path)
     cfg['model']['params']['cond_stage_config']['params'] = {'model_dir': os.path.join(maindir, 'models')} # to FrozenCLIPEmbedder
     with open(model_path,'rb') as f:
@@ -63,7 +62,9 @@ def load_model(cfg_path, model_path, maindir, embedding=None):
     del model_bytes
     model = instantiate_from_config(cfg.model)
     m, u  = model.load_state_dict(pl_sd['state_dict'], strict=False)
-    model.to(torch.float16).to(device)
+    if use_half is True:
+        model.to(torch.float16)
+    model.to(device)
     model.cond_stage_model.device = device
     model.eval()
     for m in model.modules():
@@ -85,8 +86,7 @@ def load_img(path, size=None, tensor=True):
     return 2.*image - 1., (w,h)
 
 def save_img(image, num, out_dir, prefix='', filepath=None):
-    image = torch.clamp((image + 1.0) / 2.0, min=0.0, max=1.0)
-    image = 255. * rearrange(image.cpu().numpy(), 'c h w -> h w c')
+    image = torch.clamp((image + 1.) / 2., min=0., max=1.).permute(1,2,0).cpu().numpy() * 255
     if filepath is None: filepath = prefix + '%05d.jpg' % num
     Image.fromarray(image.astype(np.uint8)).save(os.path.join(out_dir, filepath))
 
@@ -241,17 +241,6 @@ def log_tokens(text, model):
     print(f".. {usedTokens} tokens: {tokenized}")
     if discarded != "": 
         print(f".. {totalTokens-usedTokens} discarded: {discarded}")
-
-def precision_cast(func: Callable):
-    ''' Decorator for proper usage of the model. Casts floats correctly and freezes it for greater precision '''
-    def wrapper(*args, **kwargs):
-        nonlocal func
-        precision_scope = torch.autocast # if a.precision == "autocast" else nullcontext
-        with torch.no_grad():
-            with precision_scope("cuda"):
-                # with model.ema_scope():
-                    return func(*args, **kwargs)
-    return wrapper
 
 def read_latents(latents):
     if latents is not None and os.path.isfile(latents):

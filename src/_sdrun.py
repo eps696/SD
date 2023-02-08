@@ -1,6 +1,7 @@
 import os, sys
 import time
 import argparse
+from contextlib import nullcontext
 
 import torch
 import torch.nn.functional as F
@@ -15,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'xtra'))
 import k_diffusion as K
 from ldm.models.diffusion.ddim import DDIMSampler
 from sampling import KCFGDenoiser, prompt_injects
-from utils import load_model, load_img, save_img, makemask, calc_size, txt_clean, read_txt, read_multitext, precision_cast, prep_midas, log_tokens, img_list, basename, progbar
+from utils import load_model, load_img, save_img, makemask, calc_size, txt_clean, read_txt, read_multitext, prep_midas, log_tokens, img_list, basename, progbar
 
 samplers = ['ddim', 'klms', 'euler', 'euler_a', 'dpm_ada', 'dpm_fast', 'dpm2_a'] # 'heun', 'dpmpp_2s_a', 'dpm2', 'dpmpp_2m'
 models = { 
@@ -23,6 +24,7 @@ models = {
     '15i' : ['src/yaml/v1-inpainting.yaml',  'models/sd-v15-512-inpaint-fp16.ckpt', 512],
     'v2i' : ['src/yaml/v2-inpainting.yaml',  'models/sd-v2-512-inpaint-fp16.ckpt',  512],
     'v2d' : ['src/yaml/v2-midas.yaml',       'models/sd-v2-512-depth-fp16.ckpt',    512],
+    'v2x' : ['src/yaml/x4-upscaling.yaml',   'models/sd-v2-upscale4.ckpt',          512],
     'v21' : ['src/yaml/v2-inference.yaml',   'models/sd-v21-512-fp16.ckpt',         512],
     'v21v': ['src/yaml/v2-inference-v.yaml', 'models/sd-v21v-768-fp16.ckpt',        768],
 }
@@ -46,10 +48,10 @@ def get_args():
     parser.add_argument('-C','--cfg_scale', default=7.5, type=float, help="prompt guidance scale")
     parser.add_argument('-f', '--strength', default=0.75, type=float, help="strength of image processing. 0 = preserve img, 1 = replace it completely")
     parser.add_argument('-s',  '--steps',   default=50, type=int, help="number of diffusion steps")
-    parser.add_argument('--precision',      default='autocast')
+    parser.add_argument('--precision',      default='autocast', help='autocast or fp32')
     parser.add_argument('-S',  '--seed',    type=int, help="image seed")
     # misc
-    parser.add_argument('-sz', '--size',    default=None, help="image width, multiple of 32")
+    parser.add_argument('-sz', '--size',    default=None, help="image sizes, multiple of 32")
     parser.add_argument('-inv', '--invert_mask', action='store_true')
     parser.add_argument('-v',  '--verbose', action='store_true')
     return parser.parse_args()
@@ -60,6 +62,7 @@ device = torch.device('cuda')
 
 def sd_setup(a):
     if not hasattr(a, 'maindir'): a.maindir = './' # for external scripts
+    use_half = a.precision not in ['full', 'float32', 'fp32']
     model = load_model(*[os.path.join(a.maindir, d) for d in models[a.model][:2]], a.maindir)
     if model.parameterization == "v":
         try:
@@ -74,7 +77,7 @@ def sd_setup(a):
     a.hybrid_cond = model.uses_rml_inpainting or hasattr(model, 'depth_model') # runwayml inpaint or depth
     if a.hybrid_cond is True: a.sampler = 'ddim'
     sampler = DDIMSampler(model, device=device)
-    sampler.make_schedule(ddim_num_steps=a.steps, ddim_eta=0., ddim_discretize='uniform', verbose=False)
+    sampler.make_schedule(ddim_num_steps=a.steps, ddim_eta=0., verbose=False)
 
     if a.sampler == 'klms': # fast, consistent for interpolation
         sampling_fn = K.sampling.sample_lms
@@ -121,7 +124,7 @@ def sd_setup(a):
         model.first_stage_model.load_state_dict(vae_dict, strict=False)
 
     def img_lat(image):
-        if a.precision not in ['full', 'float32']: image = image.half()
+        if use_half: image = image.half()
         return model.get_first_stage_encoding(model.encode_first_stage(image)) # move to latent space
     def lat_z(lat): # for k-samplers
         return lat + torch.randn_like(lat) * sigma_lat
@@ -130,17 +133,18 @@ def sd_setup(a):
     def img_z(image):
         return lat_z_enc(img_lat(image)) if a.sampler=='ddim' else lat_z(img_lat(image))
     def rnd_z(H, W):
-        return torch.randn([1, model.channels, H, W], device=device) * sigmas[0] # [1,4,64,64] noise
+        x = 1. if a.sampler == 'ddim' else sigmas[0]
+        return x * torch.randn([1, model.channels, H, W], device=device) # [1,4,64,64] noise
     def txt_c(txt):
         args = [txt] if not hasattr(a, 'embeds') or a.embeds is None else prompt_injects(txt, a.embeds, os.path.join(a.maindir, 'models')) # txt, emb_manager
         return model.get_learned_conditioning(*args)
 
-    @precision_cast
+    precision_cast  = torch.autocast if use_half else nullcontext
     def generate(z_, c_, uc=uc, cw=None, img=None, mask=None, thresh=True):
-        with model.ema_scope():
-            if a.sampler == 'ddim': # ddim decode = required for hybrid_cat [depth/inpaint]
-                samples = sampler.decode(z_, c_, t_enc, unconditional_guidance_scale=a.cfg_scale, unconditional_conditioning=uc) # [1,4,64,64]
-            else:
+        with torch.no_grad(), precision_cast('cuda'), model.ema_scope():
+            if a.sampler == 'ddim': # ddim decode = for hybrid conditions [depth/inpaint/upscale models]
+                samples = sampler.decode(z_, c_, t_enc, uncond_scale=a.cfg_scale, uc=uc, init_latent=img, mask=mask) # [1,4,64,64]
+            else: # k-sampling = for normal models
                 extra_args = {'cond': c_, 'uncond': uc, 'cond_scale': a.cfg_scale, 'dynamic_threshold': thresh} # thresholding fails if c=uc!
                 if mask is not None and img is not None: 
                     extra_args = {**extra_args, 'x_frozen': img, 'mask': mask}
@@ -149,6 +153,7 @@ def sd_setup(a):
                 extra_args['cond_weights'] = [c / sum(cw) for c in cw]
                 extra_args['cond_counts'] = [c_count,]
                 samples = sampling_fn(model_cfg, z_, sigmas, extra_args=extra_args, disable=False) # [1,4,64,64]
+            del z_, c_, uc;  torch.cuda.empty_cache()
             return model.decode_first_stage(samples)[0] # [3,h,w]
 
     return [a, model, uc, img_lat, lat_z, lat_z_enc, img_z, rnd_z, txt_c, generate]
@@ -174,7 +179,8 @@ def main():
     prompts, cws = read_multitext(a.in_txt, a.prefix, a.postfix, flat=a.hybrid_cond)
     count = len(prompts)
 
-    if a.in_img is not None and os.path.exists(a.in_img):
+    if a.in_img is not None:
+        assert os.path.exists(a.in_img), "!! Image(s) %s not found !!" % a.in_img
         img_paths = img_list(a.in_img) if os.path.isdir(a.in_img) else [a.in_img]
         count = max(count, len(img_paths))
 
@@ -188,7 +194,7 @@ def main():
         c_ = txt_c(prompt)
 
         # img2img
-        if a.in_img is not None and os.path.exists(a.in_img):
+        if a.in_img is not None:
             img_path = img_paths[i % len(img_paths)]
             file_out = os.path.basename(img_path)
             init_image, (W,H) = load_img(img_path, size)
@@ -202,7 +208,7 @@ def main():
                     with torch.no_grad(), torch.autocast("cuda"):
                         dd = model.depth_model(prep_midas(init_image)) # [1,1,384,384]
                     dd = torch.nn.functional.interpolate(dd, size=[H//8, W//8], mode="bicubic", align_corners=False)
-                    depth_min, depth_max = torch.amin(dd, dim=[1, 2, 3], keepdim=True), torch.amax(dd, dim=[1, 2, 3], keepdim=True)
+                    depth_min, depth_max = torch.amin(dd, dim=[1,2,3], keepdim=True), torch.amax(dd, dim=[1,2,3], keepdim=True)
                     dd = 2. * (dd - depth_min) / (depth_max - depth_min) - 1.
                     hybrid_cat = torch.cat([dd]) # [1,1,64,64]
 
@@ -217,13 +223,12 @@ def main():
                 z_ = lat_z_enc(lat_)
                 image = generate(z_, c_cat, uc_cat)
 
-            else: # normal models, k-sampler
-                z_ = lat_z(lat_)
+            else: # normal models
+                z_ = img_z(init_image)
                 image = generate(z_, c_, cw=cws[i%len(cws)], img=lat_, mask=mask)
 
-        # txt2img, k-sampler
+        # txt2img
         else:
-            assert a.sampler != 'ddim', " Wrong sampler! Use k-samplers for text-only generation"
             file_out = '%s-%s-%s-%d.jpg' % (txt_clean(prompt)[:128], a.model, a.sampler, a.seed)
             W, H = [models[a.model][2]]*2 if size is None else size
             z_ = rnd_z(H//8, W//8) # [1,4,64,64] noise

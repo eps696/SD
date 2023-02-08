@@ -63,9 +63,9 @@ python src/latwalk.py -t yourfile.txt --size 1024-576
 ```
 python src/latwalk.py -t yourfile.txt -im _in/pix/bench2.jpg --mask _in/pix/mask/bench2_mask.jpg 
 ```
-Other options can be seen by running these scripts with `--help` option.  
+Check other options by running these scripts with `--help` option; try various models, samplers, noisers, etc.  
+Text prompts may include either [textual inversion] embeddings (e.g. `<depthmap>`) or weights (like `good prompt :1 | also good prompt :1 | bad prompt :-0.5`). The latter may degrade overall accuracy though.  
 Interpolated videos may be further smoothed out with [FILM](https://github.com/google-research/frame-interpolation).  
-Text prompts may include [textual inversion] embeddings (e.g. `<depthmap>`) and weights (like `good prompt :1 | also good prompt :1 | bad prompt :-0.5`). The latter may degrade overall accuracy though. 
 
 There are also Windows bat-files, slightly simplifying and automating the commands. 
 

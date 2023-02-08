@@ -11,7 +11,7 @@ from utils import load_img, save_img, slerp, lerps, lerp, blend, calc_size, read
 
 from utils import read_latents, img_list, basename, progbar
 
-samplers = ['klms', 'euler', 'dpm_ada', 'dpm_fast']
+samplers = ['ddim', 'klms', 'euler', 'dpm_ada', 'dpm_fast']
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -40,7 +40,7 @@ def get_args():
     parser.add_argument(     '--precision', default='autocast')
     parser.add_argument('-S', '--seed',     type=int, help="image seed")
     # misc
-    parser.add_argument('-sz', '--size',    default=None, help="image width, multiple of 32")
+    parser.add_argument('-sz', '--size',    default=None, help="image sizes, multiple of 32")
     parser.add_argument('-inv', '--invert_mask', action='store_true')
     parser.add_argument('-v', '--verbose',  action='store_true')
     return parser.parse_args()
@@ -87,7 +87,6 @@ def main():
         z_ = img_z(init_image)
     # only text prompts
     else:
-        assert a.sampler != 'ddim', " Wrong sampler! Use k-samplers for text-only generation"
         W, H = [models[a.model][2]]*2 if size is None else size
         z_ = None
 
@@ -107,7 +106,7 @@ def main():
             os.makedirs(os.path.join(a.out_dir, lat_dir), exist_ok=True)
             pbar = progbar(count)
 
-        cs = []
+        cs = [] 
         zs = [] if z_ is None else [z_]
         for i, prompt in enumerate(prompts):
             cs += [txt_c(prompt)] # [1,77,768] condition
