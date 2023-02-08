@@ -36,6 +36,7 @@ def get_args():
     parser.add_argument(       '--vae',     default='ema', help='orig, ema, mse')
     parser.add_argument('-C','--cfg_scale', default=7.5, type=float, help="prompt guidance scale")
     parser.add_argument('-f', '--strength', default=0.75, type=float, help="strength of image processing. 0 = preserve img, 1 = replace it completely")
+    parser.add_argument(      '--ddim_eta', default=0., type=float)
     parser.add_argument('-s', '--steps',    default=50, type=int, help="number of diffusion steps")
     parser.add_argument(     '--precision', default='autocast')
     parser.add_argument('-S', '--seed',     type=int, help="image seed")

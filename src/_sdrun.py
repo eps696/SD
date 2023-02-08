@@ -24,7 +24,7 @@ models = {
     '15i' : ['src/yaml/v1-inpainting.yaml',  'models/sd-v15-512-inpaint-fp16.ckpt', 512],
     'v2i' : ['src/yaml/v2-inpainting.yaml',  'models/sd-v2-512-inpaint-fp16.ckpt',  512],
     'v2d' : ['src/yaml/v2-midas.yaml',       'models/sd-v2-512-depth-fp16.ckpt',    512],
-    'v2x' : ['src/yaml/x4-upscaling.yaml',   'models/sd-v2-upscale4.ckpt',          512],
+    # 'v2x' : ['src/yaml/x4-upscaling.yaml',   'models/sd-v2-upscale4.ckpt',          512],
     'v21' : ['src/yaml/v2-inference.yaml',   'models/sd-v21-512-fp16.ckpt',         512],
     'v21v': ['src/yaml/v2-inference-v.yaml', 'models/sd-v21v-768-fp16.ckpt',        768],
 }
@@ -47,6 +47,7 @@ def get_args():
     parser.add_argument(       '--vae',     default='ema', help='orig, ema, mse')
     parser.add_argument('-C','--cfg_scale', default=7.5, type=float, help="prompt guidance scale")
     parser.add_argument('-f', '--strength', default=0.75, type=float, help="strength of image processing. 0 = preserve img, 1 = replace it completely")
+    parser.add_argument(      '--ddim_eta', default=0., type=float)
     parser.add_argument('-s',  '--steps',   default=50, type=int, help="number of diffusion steps")
     parser.add_argument('--precision',      default='autocast', help='autocast or fp32')
     parser.add_argument('-S',  '--seed',    type=int, help="image seed")
@@ -63,7 +64,7 @@ device = torch.device('cuda')
 def sd_setup(a):
     if not hasattr(a, 'maindir'): a.maindir = './' # for external scripts
     use_half = a.precision not in ['full', 'float32', 'fp32']
-    model = load_model(*[os.path.join(a.maindir, d) for d in models[a.model][:2]], a.maindir)
+    model = load_model(*[os.path.join(a.maindir, d) for d in models[a.model][:2]], a.maindir, use_half=use_half)
     if model.parameterization == "v":
         try:
             import xformers
@@ -77,7 +78,7 @@ def sd_setup(a):
     a.hybrid_cond = model.uses_rml_inpainting or hasattr(model, 'depth_model') # runwayml inpaint or depth
     if a.hybrid_cond is True: a.sampler = 'ddim'
     sampler = DDIMSampler(model, device=device)
-    sampler.make_schedule(ddim_num_steps=a.steps, ddim_eta=0., verbose=False)
+    sampler.make_schedule(ddim_num_steps=a.steps, ddim_eta=a.ddim_eta, verbose=False)
 
     if a.sampler == 'klms': # fast, consistent for interpolation
         sampling_fn = K.sampling.sample_lms
@@ -140,7 +141,7 @@ def sd_setup(a):
         return model.get_learned_conditioning(*args)
 
     precision_cast  = torch.autocast if use_half else nullcontext
-    def generate(z_, c_, uc=uc, cw=None, img=None, mask=None, thresh=True):
+    def generate(z_, c_, uc=uc, cw=None, img=None, mask=None, thresh=True, out_lat=False):
         with torch.no_grad(), precision_cast('cuda'), model.ema_scope():
             if a.sampler == 'ddim': # ddim decode = for hybrid conditions [depth/inpaint/upscale models]
                 samples = sampler.decode(z_, c_, t_enc, uncond_scale=a.cfg_scale, uc=uc, init_latent=img, mask=mask) # [1,4,64,64]
@@ -154,6 +155,8 @@ def sd_setup(a):
                 extra_args['cond_counts'] = [c_count,]
                 samples = sampling_fn(model_cfg, z_, sigmas, extra_args=extra_args, disable=False) # [1,4,64,64]
             del z_, c_, uc;  torch.cuda.empty_cache()
+            if out_lat: 
+                return samples # for separate final decoding
             return model.decode_first_stage(samples)[0] # [3,h,w]
 
     return [a, model, uc, img_lat, lat_z, lat_z_enc, img_z, rnd_z, txt_c, generate]
