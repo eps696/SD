@@ -146,32 +146,23 @@ def read_multitext(in_txt, prefix=None, postfix=None, flat=False):
     lines = read_txt(in_txt)
     if prefix  is not None: prefix  = read_txt(prefix)
     if postfix is not None: postfix = read_txt(postfix)
-    if flat:
-        prompts = []
-        for i, tt in enumerate(lines):
-            tt = tt.strip()
-            if len(tt) == 0:
-                prompts.append('')
-            elif tt[0] != '#':
-                if prefix  is not None: tt = prefix[i % len(prefix)] + ' | ' + tt
-                if postfix is not None: tt = tt + ' | ' + postfix[i % len(postfix)]
-                prompts.append(tt)
+    prompts = [parse_line(tt) for tt in lines if tt.strip()[0] != '#']
+    maxlen = 0
+    for prompt in prompts:
+        maxlen = max(maxlen, len(prompt))
+    for i in range(len(prompts)):
+        if len(prompts[i]) < maxlen:
+            prompts[i] += [('', 1e-4)] * (maxlen - len(prompts[i]))
+    if prefix is not None:
+        prompts = [parse_line(prefix[i % len(prefix)]) + prompts[i] for i in range(len(prompts))]
+    if postfix is not None:
+        prompts = [prompts[i] + parse_line(postfix[i % len(postfix)]) for i in range(len(prompts))]
+    weights = [[p[1] for p in prompt] for prompt in prompts]
+    prompts = [[p[0] for p in prompt] for prompt in prompts]
+    if flat is True:
+        prompts = [' | '.join([p for p in prompt if len(p)>0]) for prompt in prompts]
         weights = [1.] * len(prompts)
-    else:
-        prompts = [parse_line(tt) for tt in lines if tt.strip()[0] != '#']
-        maxlen = 0
-        for prompt in prompts:
-            maxlen = max(maxlen, len(prompt))
-        for i in range(len(prompts)):
-            if len(prompts[i]) < maxlen:
-                prompts[i] += [('', 1e-4)] * (maxlen - len(prompts[i]))
-        if prefix is not None:
-            prompts = [parse_line(prefix[i % len(prefix)]) + prompts[i] for i in range(len(prompts))]
-        if postfix is not None:
-            prompts = [prompts[i] + parse_line(postfix[i % len(postfix)]) for i in range(len(prompts))]
-        weights = [[p[1] for p in prompt] for prompt in prompts]
-        prompts = [[p[0] for p in prompt] for prompt in prompts]
-    return prompts, weights # two lists if flat, or two lists of lists if multi
+    return prompts, weights # two lists [if flat], or two lists of lists [if multi]
 
 def unique_prefix(out_dir):
     dirlist = sorted(os.listdir(out_dir), reverse=True) # sort reverse alphabetically until we find max+1

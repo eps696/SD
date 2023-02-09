@@ -151,6 +151,7 @@ def sd_setup(a):
                     extra_args = {**extra_args, 'x_frozen': img, 'mask': mask}
                 c_count = c_.shape[0]
                 if cw is None: cw = [1.] * c_count
+                if not isinstance(cw, list): cw = [cw]
                 extra_args['cond_weights'] = [c / sum(cw) for c in cw]
                 extra_args['cond_counts'] = [c_count,]
                 samples = sampling_fn(model_cfg, z_, sigmas, extra_args=extra_args, disable=False) # [1,4,64,64]
