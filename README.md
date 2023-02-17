@@ -3,15 +3,17 @@
 <p align='center'><img src='_in/something.jpg' /></p>
 
 This is yet another Stable Diffusion compilation, aimed to be functional, clean & compact enough for various experiments. There's no GUI here, as the target audience are creative coders rather than post-Photoshop users. For the latter one may check [InvokeAI] or [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui) as a convenient production tool, or [Deforum] for precisely controlled animations.  
-The code is based on the [CompVis] and [Stability AI] libraries and heavily borrows from [this repo](https://github.com/AmericanPresidentJimmyCarter/stable-diffusion), with occasional additions from [InvokeAI] and [Deforum]. The following codebases are partially included here (to ensure compatibility and the ease of setup): [k-diffusion](https://github.com/crowsonkb/k-diffusion), [Taming Transformers](https://github.com/CompVis/taming-transformers), [OpenCLIP], [CLIPseg].
+The code is based on the [CompVis] and [Stability AI] libraries and heavily borrows from [this repo](https://github.com/AmericanPresidentJimmyCarter/stable-diffusion), with occasional additions from [InvokeAI] and [Deforum], as well as the others mentioned below. The following codebases are partially included here (to ensure compatibility and the ease of setup): [k-diffusion](https://github.com/crowsonkb/k-diffusion), [Taming Transformers](https://github.com/CompVis/taming-transformers), [OpenCLIP], [CLIPseg].
 
 Current functions:
 * Text to image
 * Image re- and in-painting
 * Latent interpolations (with text prompts and images)
+
 Fine-tuning:
 * Prompt embeddings with [custom diffusion]
 * Prompt embeddings with [textual inversion]
+
 Other features:
 * Memory efficient with `xformers` (hi res on 6gb VRAM GPU)
 * Use of special depth/inpainting and v2 models
@@ -83,11 +85,10 @@ python src/train.py --token mycat1 --term cat --data data/mycat1
 ```
 python src/train.py --token mycat1 --term cat --data data/mycat1 --reg_data data/cat
 ```
-Note that for the latter you'll need not only target reference images (`data/mycat1`), but also generic images of similar objects (`data/cat`).  
-Custom diffusion trains faster and can achieve impressive reproduction quality in the simple and similar prompts, but it can entirely lose the point if the prompt is too different from the original category or just too lengthy.  
-Textual inversion is more generic but stable. Its embeddings can also be easily combined without additional retraining.  
+Results of the trainings above will be saved under `train` directory. 
 
-Results of the training will be saved under `train` directory. 
+Custom diffusion trains faster and can achieve impressive reproduction quality in the simple and similar prompts, but it can entirely lose the point if the prompt is too different from the original category (or just too lengthy). Note that in that case you'll need not only target reference images (`data/mycat1`), but also generic images of similar objects (`data/cat`). Apparently, you can generate such generic images with SD itself.  
+Textual inversion is more generic but stable. Its embeddings can also be easily combined without additional retraining.  
 
 * Generate image with embedding from [textual inversion]. You'll need to rename the embedding file as your trained token (e.g. `mycat1.pt`), and point the path to its directory. Note that the token is hardcoded in the file, so you can't change it afterwards.
 ```
