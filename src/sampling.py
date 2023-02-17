@@ -24,7 +24,7 @@ TAGS_RE = re.compile('<.*?>')
 sd_concepts_url_fn = lambda concept: f'https://huggingface.co/sd-concepts-library/{concept}/resolve/main/'
 UNLIKELY_TOKENS = ['?', '°', '±', '?', '?', '?', 'µ', '·', '?', '?', '?', '»', '?', '?', '?',]
 
-def prompt_injects(prompt, embedding_folder, model_dir='models', use_half=True):
+def prompt_injects(prompt, embedding_dir, model_dir='models', use_half=True):
     ''' Inject custom concept into a prompt '''
     def _next_token_for_concept():
         for token in UNLIKELY_TOKENS:
@@ -58,21 +58,28 @@ def prompt_injects(prompt, embedding_folder, model_dir='models', use_half=True):
         embedding_paths = []
         for tag in re.findall(TAGS_RE, prompt):
             concept = tag[1:-1]
-            tag_actual = None
-            token_name_path = os.path.join(embedding_folder, f'{concept}/token_identifier.txt')
-            concept_file_path = os.path.join(embedding_folder, f'{concept}/learned_embeds.bin')
-            if not os.path.isfile(token_name_path): # not found, downloading
-                os.makedirs(os.path.join(embedding_folder, concept), exist_ok=True)
-                urllib.request.urlretrieve(sd_concepts_url_fn(concept) + 'token_identifier.txt', token_name_path)
-                urllib.request.urlretrieve(sd_concepts_url_fn(concept) + 'learned_embeds.bin', concept_file_path)
-            if not os.path.isfile(token_name_path): # not found on the web
-                return prompt_injected, None
+            concept_file_path = os.path.join(embedding_dir, f'{concept}.pt')
 
-            with open(token_name_path, 'r') as token_name_file:
-                tag_actual = token_name_file.read()
+            if not os.path.isfile(concept_file_path): # no local pt, trying bin from hf
+                print('not found', concept_file_path)
+                tag_actual = None
+                token_name_path = os.path.join(embedding_dir, f'{concept}/token_identifier.txt')
+                concept_file_path = os.path.join(embedding_dir, f'{concept}/learned_embeds.bin')
+                if not os.path.isfile(token_name_path): # not found, downloading
+                    try:
+                        os.makedirs(os.path.join(embedding_dir, concept), exist_ok=True)
+                        urllib.request.urlretrieve(sd_concepts_url_fn(concept) + 'token_identifier.txt', token_name_path)
+                        urllib.request.urlretrieve(sd_concepts_url_fn(concept) + 'learned_embeds.bin', concept_file_path)
+                    except:
+                        print(' Inversion embeddings not found anywhere! Ignoring..')
+                if not os.path.isfile(token_name_path): # not found on the web
+                    return prompt_injected, None
+
+                with open(token_name_path, 'r') as token_name_file:
+                    tag_actual = token_name_file.read()
+                prompt_injected = prompt_injected.replace(tag, tag_actual)
 
             embedding_paths.append(concept_file_path)
-            prompt_injected = prompt_injected.replace(tag, tag_actual)
 
         # Merge the embeddings.
         embedder = FrozenCLIPEmbedder(model_dir=model_dir).cuda()

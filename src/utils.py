@@ -53,15 +53,42 @@ def slerp(v0, v1, x, DOT_THRESHOLD=0.9995):
         v2 = s0 * v0 + s1 * v1
     return v2
 
-def load_model(cfg_path, model_path, maindir, embedding=None, use_half=True):
-    cfg = OmegaConf.load(cfg_path)
-    cfg['model']['params']['cond_stage_config']['params'] = {'model_dir': os.path.join(maindir, 'models')} # to FrozenCLIPEmbedder
-    with open(model_path,'rb') as f:
+def load_model(cfg_path, model_path, maindir, delta_ckpt=None, token_mod=None, compress=False, use_half=True):
+    cfg = OmegaConf.load(os.path.join(maindir, cfg_path))
+    txtenc = cfg.model.params.cond_stage_config # FrozenCLIPEmbedder / FrozenCLIPEmbedderWrapper / FrozenOpenCLIPEmbedder / ..
+    if not hasattr(txtenc, 'params'): txtenc.params = {}
+    txtenc.params.model_dir = os.path.join(maindir, 'models')
+    if token_mod is not None and delta_ckpt is not None: # custom diff
+        txtenc.params.modifier_token = token_mod
+
+    with open(os.path.join(maindir, model_path),'rb') as f:
         model_bytes = f.read()
     pl_sd = torch.load(io.BytesIO(model_bytes), map_location='cpu')
     del model_bytes
     model = instantiate_from_config(cfg.model)
-    m, u  = model.load_state_dict(pl_sd['state_dict'], strict=False)
+
+    # custom diffusion
+    sd = pl_sd["state_dict"]
+    if token_mod is not None and delta_ckpt is not None: # will change dim
+        token_weights = sd["cond_stage_model.transformer.text_model.embeddings.token_embedding.weight"]
+        del sd["cond_stage_model.transformer.text_model.embeddings.token_embedding.weight"]
+    m, u = model.load_state_dict(sd, strict=False)
+    if token_mod is not None and delta_ckpt is not None:
+        model.cond_stage_model.transformer.text_model.embeddings.token_embedding.weight.data[:token_weights.shape[0]] = token_weights
+        delta_st = torch.load(delta_ckpt)
+        embed = None
+        if 'embed' in delta_st['state_dict']:
+            embed = delta_st['state_dict']['embed'].reshape(-1,768)
+            del delta_st['state_dict']['embed']
+        delta_st = delta_st['state_dict']
+        if compress:
+            for name in delta_st.keys():
+                if 'to_k' in name or 'to_v' in name:
+                    delta_st[name] = model.state_dict()[name] + delta_st[name]['u']@delta_st[name]['v']
+        model.load_state_dict(delta_st, strict=False)
+        if embed is not None:
+            model.cond_stage_model.transformer.text_model.embeddings.token_embedding.weight.data[-embed.shape[0]:] = embed
+
     if use_half is True:
         model.to(torch.float16)
     model.to(device)
@@ -70,8 +97,6 @@ def load_model(cfg_path, model_path, maindir, embedding=None, use_half=True):
     for m in model.modules():
         if isinstance(m, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
             m._orig_padding_mode = m.padding_mode
-    if embedding is not None:
-        model.embedding_manager.load(embedding, precision == 'float32' or precision == 'autocast')
     return model
 
 def load_img(path, size=None, tensor=True):

@@ -1,6 +1,5 @@
 @echo off
 set KMP_DUPLICATE_LIB_OK=TRUE 
-rem if "%1"=="" goto help
 if [%1]==[] goto help
 echo .. %1
 

@@ -12,7 +12,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../xtra'))
 import open_clip
 from ldm.util import default, count_params
 
-
 def _expand_mask(mask, dtype, tgt_len=None):
     """ Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]` """
     bsz, src_len = mask.size()
@@ -33,7 +32,6 @@ def _build_causal_attention_mask(bsz, seq_len, dtype):
 class AbstractEncoder(nn.Module):
     def __init__(self):
         super().__init__()
-
     def encode(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -130,6 +128,9 @@ class FrozenCLIPEmbedder(AbstractEncoder):
         def embedding_forward(self, input_ids=None, position_ids=None, inputs_embeds=None, embedding_manager=None) -> torch.Tensor:
             seq_length = (input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2])
             if inputs_embeds is None:
+# !!! device            
+                emb_fn_device = next(self.token_embedding.parameters()).device # check device inside module
+                if input_ids.device != emb_fn_device: input_ids = input_ids.to(emb_fn_device)
                 inputs_embeds = self.token_embedding(input_ids)
             if embedding_manager is not None:
                 inputs_embeds = embedding_manager(input_ids, inputs_embeds)
@@ -139,13 +140,13 @@ class FrozenCLIPEmbedder(AbstractEncoder):
             embeddings = inputs_embeds + position_embeddings
             return embeddings
 
-        self.transformer.text_model.embeddings.forward = (embedding_forward.__get__(self.transformer.text_model.embeddings))
+        self.transformer.text_model.embeddings.forward = embedding_forward.__get__(self.transformer.text_model.embeddings)
 
         def encoder_forward(self, inputs_embeds, attention_mask=None, causal_attention_mask=None, \
                             output_attentions=None, output_hidden_states=None, return_dict=None):
-            output_attentions = (output_attentions if output_attentions is not None else self.config.output_attentions)
-            output_hidden_states = (output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states)
-            return_dict = (return_dict if return_dict is not None else self.config.use_return_dict)
+            if output_attentions    is None: output_attentions    = self.config.output_attentions
+            if output_hidden_states is None: output_hidden_states = self.config.output_hidden_states
+            if return_dict          is None: return_dict          = self.config.use_return_dict
 
             encoder_states = () if output_hidden_states else None
             all_attentions = () if output_attentions else None
@@ -168,9 +169,9 @@ class FrozenCLIPEmbedder(AbstractEncoder):
 
         def text_encoder_forward(self, input_ids=None, attention_mask=None, position_ids=None, output_attentions=None, output_hidden_states=None, \
                                  return_dict=None, embedding_manager=None):
-            output_attentions = (output_attentions if output_attentions is not None else self.config.output_attentions)
-            output_hidden_states = (output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states)
-            return_dict = (return_dict if return_dict is not None else self.config.use_return_dict)
+            if output_attentions    is None: output_attentions    = self.config.output_attentions
+            if output_hidden_states is None: output_hidden_states = self.config.output_hidden_states
+            if return_dict          is None: return_dict          = self.config.use_return_dict
 
             if input_ids is None:
                 raise ValueError('You have to specify either input_ids')

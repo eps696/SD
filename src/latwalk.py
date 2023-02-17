@@ -40,6 +40,10 @@ def get_args():
     parser.add_argument('-s', '--steps',    default=50, type=int, help="number of diffusion steps")
     parser.add_argument(     '--precision', default='autocast')
     parser.add_argument('-S', '--seed',     type=int, help="image seed")
+    # custom diff with token mods
+    parser.add_argument('-tm', "--token_mod", default=None, help="custom modifier token(s) to use with prompts")
+    parser.add_argument('-d', "--delta_ckpt", default=None, help="path to delta checkpoint of fine-tuned custom diffusion block")
+    parser.add_argument("--compress", action='store_true', help="if delta checkpoint is compressed")
     # misc
     parser.add_argument('-sz', '--size',    default=None, help="image sizes, multiple of 32")
     parser.add_argument('-inv', '--invert_mask', action='store_true')
@@ -121,7 +125,7 @@ def main():
                 pbar.upd(uprows=1)
 
         if a.out_lats is not None: # save keypoints => exit
-            print('cs', torch.cat(cs).shape, 'zs', torch.cat(zs).shape, 'cw', torch.tensor(cws).shape)
+            print('zs', torch.cat(zs).shape, 'cs', torch.cat(cs).shape, 'cw', torch.tensor(cws).shape)
             exit()
         
     # interpolate

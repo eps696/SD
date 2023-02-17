@@ -24,6 +24,8 @@ def download_model(url: str, root: str = "./models"):
 
     return download_target
 
+# print(' downloading SD 1.4 model')
+# download_model("https://www.dropbox.com/s/2b3w0vysf485tpc/sd-v14-512-fp16.ckpt?dl=1", 'models')
 print(' downloading SD 1.5 model')
 download_model("https://www.dropbox.com/s/k9odmzadgyo9gdl/sd-v15-512-fp16.ckpt?dl=1", 'models')
 print(' downloading SD 1.5-inpainting model')

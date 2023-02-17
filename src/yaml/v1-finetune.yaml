@@ -71,10 +71,10 @@ model:
       target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
 
 data:
-  target: main.DataModuleFromConfig
+  target: train.DataModuleFromConfig
   params:
     batch_size: 1
-    num_workers: 2
+    num_workers: 4
     wrap: false
     train:
       target: ldm.data.personalized.PersonalizedBase
@@ -82,29 +82,29 @@ data:
         size: 512
         set: train
         per_image_tokens: false
-        repeats: 100
+        repeats: 10 # 100
     validation:
       target: ldm.data.personalized.PersonalizedBase
       params:
         size: 512
         set: val
         per_image_tokens: false
-        repeats: 10
+        # repeats: 10
 
 lightning:
   modelcheckpoint:
     params:
       every_n_train_steps: 500
+      verbose: false
   callbacks:
     image_logger:
-      target: main.ImageLogger
+      target: train.ImageLogger
       params:
         batch_frequency: 500
-        max_images: 8
+        max_images: 2
         increase_log_steps: False
 
   trainer:
     benchmark: True
-    max_steps: 4000000
-#    max_steps: 4000
-    
+    max_steps: 5000
+    find_unused_parameters: False

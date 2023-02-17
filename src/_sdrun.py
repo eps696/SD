@@ -20,6 +20,7 @@ from utils import load_model, load_img, save_img, makemask, calc_size, txt_clean
 
 samplers = ['ddim', 'klms', 'euler', 'euler_a', 'dpm_ada', 'dpm_fast', 'dpm2_a'] # 'heun', 'dpmpp_2s_a', 'dpm2', 'dpmpp_2m'
 models = { 
+    '14'  : ['src/yaml/v1-inference.yaml',   'models/sd-v14-512-fp16.ckpt',         512],
     '15'  : ['src/yaml/v1-inference.yaml',   'models/sd-v15-512-fp16.ckpt',         512],
     '15i' : ['src/yaml/v1-inpainting.yaml',  'models/sd-v15-512-inpaint-fp16.ckpt', 512],
     'v2i' : ['src/yaml/v2-inpainting.yaml',  'models/sd-v2-512-inpaint-fp16.ckpt',  512],
@@ -51,6 +52,10 @@ def get_args():
     parser.add_argument('-s',  '--steps',   default=50, type=int, help="number of diffusion steps")
     parser.add_argument('--precision',      default='autocast', help='autocast or fp32')
     parser.add_argument('-S',  '--seed',    type=int, help="image seed")
+    # custom diffusion with token mods
+    parser.add_argument("--token_mod", default=None, help="custom modifier token(s) to use with prompts")
+    parser.add_argument("--delta_ckpt", default=None, help="path to delta checkpoint of fine-tuned custom diffusion block")
+    parser.add_argument("--compress", action='store_true', help="if delta checkpoint is compressed")
     # misc
     parser.add_argument('-sz', '--size',    default=None, help="image sizes, multiple of 32")
     parser.add_argument('-inv', '--invert_mask', action='store_true')
@@ -62,9 +67,21 @@ SIGMA_MAX = 14.6146
 device = torch.device('cuda')
 
 def sd_setup(a):
-    if not hasattr(a, 'maindir'): a.maindir = './' # for external scripts
     use_half = a.precision not in ['full', 'float32', 'fp32']
-    model = load_model(*[os.path.join(a.maindir, d) for d in models[a.model][:2]], a.maindir, use_half=use_half)
+    if not hasattr(a, 'maindir'): a.maindir = './' # for external scripts
+
+    [cfg, ckpt] = models[a.model][:2]
+    mod_kwargs = {}
+    if all([hasattr(a, k) for k in ['token_mod', 'delta_ckpt', 'compress']]): # custom diffusion
+        a.token_mod = '<%s>' % a.token_mod
+        mod_kwargs = {'delta_ckpt': a.delta_ckpt, 'token_mod': a.token_mod, 'compress': a.compress}
+        if a.token_mod is not None and a.delta_ckpt is not None:
+            assert os.path.exists(a.delta_ckpt), " Delta checkpoint for token mods not found"
+            cfg = 'src/yaml/v1-finetune-custom.yaml'
+            a.embeds = None # disable embedding_manager to avoid conflict
+            print(' custom mod ::', a.token_mod, basename(a.delta_ckpt))
+    model = load_model(cfg, ckpt, a.maindir, use_half=use_half, **mod_kwargs)
+
     if model.parameterization == "v":
         try:
             import xformers
@@ -140,9 +157,9 @@ def sd_setup(a):
         args = [txt] if not hasattr(a, 'embeds') or a.embeds is None else prompt_injects(txt, a.embeds, os.path.join(a.maindir, 'models')) # txt, emb_manager
         return model.get_learned_conditioning(*args)
 
-    precision_cast  = torch.autocast if use_half else nullcontext
+    precision_scope  = torch.autocast if use_half else nullcontext
     def generate(z_, c_, uc=uc, cw=None, img=None, mask=None, thresh=True, out_lat=False):
-        with torch.no_grad(), precision_cast('cuda'), model.ema_scope():
+        with torch.no_grad(), precision_scope('cuda'), model.ema_scope():
             if a.sampler == 'ddim': # ddim decode = for hybrid conditions [depth/inpaint/upscale models]
                 samples = sampler.decode(z_, c_, t_enc, uncond_scale=a.cfg_scale, uc=uc, init_latent=img, mask=mask) # [1,4,64,64]
             else: # k-sampling = for normal models
@@ -169,7 +186,7 @@ def main():
     seed_everything(a.seed)
 
     posttxt = basename(a.in_txt) if a.in_txt is not None and os.path.exists(a.in_txt) else ''
-    postimg = basename(a.in_img) if a.in_img is not None and os.path.exists(a.in_img) else ''
+    postimg = basename(a.in_img) if a.in_img is not None and os.path.isdir(a.in_img)  else ''
     if len(posttxt) > 0 or len(postimg) > 0:
         a.out_dir = os.path.join(a.out_dir, posttxt + '-' + postimg)
         a.out_dir += '-' + a.model
@@ -178,7 +195,7 @@ def main():
     size = None if a.size is None else calc_size(a.size, a.model, a.verbose) 
     if model.uses_rml_inpainting and a.mask is None:
         print('!! inpainting models need mask !!'); exit()
-    if a.verbose: print('..', basename(models[a.model][1]), '..', a.sampler, '..', a.strength)
+    if a.verbose: print('..', basename(models[a.model][1]), '..', a.sampler, '..', a.cfg_scale, '..', a.strength)
 
     prompts, cws = read_multitext(a.in_txt, a.prefix, a.postfix, flat=a.hybrid_cond)
     count = len(prompts)
