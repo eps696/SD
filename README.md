@@ -10,9 +10,9 @@ Current functions:
 * Image re- and in-painting
 * Latent interpolations (with text prompts and images)
 
-Fine-tuning:
-* Prompt embeddings with [custom diffusion]
-* Prompt embeddings with [textual inversion]
+Fine-tuning with your images:
+* Add subject (new token) with [custom diffusion]
+* Add subject (prompt embedding) with [textual inversion]
 
 Other features:
 * Memory efficient with `xformers` (hi res on 6gb VRAM GPU)
@@ -21,7 +21,7 @@ Other features:
 * Weighted multi-prompts
 * to be continued..  
 
-More details and Colab version will follow soon. 
+More details and Colab version will follow. 
 
 ## Setup
 
@@ -77,7 +77,7 @@ There are also Windows bat-files, slightly simplifying and automating the comman
 
 ## Fine-tuning
 
-* Train prompt embedding for some specific object (e.g. cat) with [textual inversion]:
+* Train prompt embedding for a specific subject (e.g. cat) with [textual inversion]:
 ```
 python src/train.py --token mycat1 --term cat --data data/mycat1
 ```
@@ -87,8 +87,8 @@ python src/train.py --token mycat1 --term cat --data data/mycat1 --reg_data data
 ```
 Results of the trainings above will be saved under `train` directory. 
 
-Custom diffusion trains faster and can achieve impressive reproduction quality in the simple and similar prompts, but it can entirely lose the point if the prompt is too different from the original category (or just too lengthy). Note that in that case you'll need not only target reference images (`data/mycat1`), but also generic images of similar objects (`data/cat`). Apparently, you can generate such generic images with SD itself.  
-Textual inversion is more generic but stable. Its embeddings can also be easily combined without additional retraining.  
+Custom diffusion trains faster and can achieve impressive reproduction quality in the simple and similar prompts, but it can entirely lose the point if the prompt is too complex or aside from the original category. Result file is 73mb (can be compressed to ~16mb). Note that in that case you'll need both target reference images (`data/mycat1`) and more random images of similar subjects (`data/cat`). Apparently, you can generate the latter with SD itself.  
+Textual inversion is more generic but stable. Its embeddings can also be easily combined without additional retraining. Result file is ~5kb.   
 
 * Generate image with embedding from [textual inversion]. You'll need to rename the embedding file as your trained token (e.g. `mycat1.pt`), and point the path to its directory. Note that the token is hardcoded in the file, so you can't change it afterwards.
 ```

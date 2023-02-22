@@ -53,7 +53,7 @@ def get_args():
 def main():
     # main setup
     a = get_args()
-    [a, model, uc, img_lat, lat_z, lat_z_enc, img_z, rnd_z, txt_c, generate] = sd_setup(a)
+    [a, model, uc, img_lat, img_z, rnd_z, txt_c, generate] = sd_setup(a)
 
     seed_everything(a.seed)
     os.makedirs(a.out_dir, exist_ok=True)

@@ -177,12 +177,12 @@ def sd_setup(a):
                 return samples # for separate final decoding
             return model.decode_first_stage(samples)[0] # [3,h,w]
 
-    return [a, model, uc, img_lat, lat_z, lat_z_enc, img_z, rnd_z, txt_c, generate]
+    return [a, model, uc, img_lat, img_z, rnd_z, txt_c, generate]
 
 def main():
     # main setup
     a = get_args()
-    [a, model, uc, img_lat, lat_z, lat_z_enc, img_z, rnd_z, txt_c, generate] = sd_setup(a)
+    [a, model, uc, img_lat, img_z, rnd_z, txt_c, generate] = sd_setup(a)
     seed_everything(a.seed)
 
     posttxt = basename(a.in_txt) if a.in_txt is not None and os.path.exists(a.in_txt) else ''
@@ -241,7 +241,7 @@ def main():
 
                 c_cat  = {"c_concat": [hybrid_cat], "c_crossattn": [c_]}
                 uc_cat = {"c_concat": [hybrid_cat], "c_crossattn": [uc]}
-                z_ = lat_z_enc(lat_)
+                z_ = rnd_z(H//8, W//8)
                 image = generate(z_, c_cat, uc_cat)
 
             else: # normal models
