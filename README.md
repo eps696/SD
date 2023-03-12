@@ -3,7 +3,9 @@
 <p align='center'><img src='_in/something.jpg' /></p>
 
 This is yet another Stable Diffusion compilation, aimed to be functional, clean & compact enough for various experiments. There's no GUI here, as the target audience are creative coders rather than post-Photoshop users. For the latter one may check [InvokeAI] or [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui) as a convenient production tool, or [Deforum] for precisely controlled animations.  
+
 The code is based on the [CompVis] and [Stability AI] libraries and heavily borrows from [this repo](https://github.com/AmericanPresidentJimmyCarter/stable-diffusion), with occasional additions from [InvokeAI] and [Deforum], as well as the others mentioned below. The following codebases are partially included here (to ensure compatibility and the ease of setup): [k-diffusion](https://github.com/crowsonkb/k-diffusion), [Taming Transformers](https://github.com/CompVis/taming-transformers), [OpenCLIP], [CLIPseg].
+*There is also a [similar repo](https://github.com/eps696/SD), based on the [diffusers] library, which is more logical and up-to-date.*  
 
 Current functions:
 * Text to image
@@ -11,8 +13,8 @@ Current functions:
 * Latent interpolations (with text prompts and images)
 
 Fine-tuning with your images:
-* Add subject (new token) with [custom diffusion]
-* Add subject (prompt embedding) with [textual inversion]
+* Add subject (new token) with [textual inversion]
+* Add subject (prompt embedding + Unet delta) with [custom diffusion]
 
 Other features:
 * Memory efficient with `xformers` (hi res on 6gb VRAM GPU)
@@ -36,7 +38,7 @@ Install `xformers` library to increase performance. It makes possible to run SD 
 ```
 pip install git+https://github.com/facebookresearch/xformers.git
 ```
-Download Stable Diffusion ([1.5](https://huggingface.co/CompVis/stable-diffusion), [1.5-inpaint](https://huggingface.co/runwayml/stable-diffusion-inpainting), [2-inpaint](https://huggingface.co/stabilityai/stable-diffusion-2-inpainting), [2-depth](https://huggingface.co/stabilityai/stable-diffusion-2-depth), [2.1](https://huggingface.co/stabilityai/stable-diffusion-2-1-base), [2.1-v](https://huggingface.co/stabilityai/stable-diffusion-2-1)), [OpenCLIP], [custom VAE](https://huggingface.co/stabilityai/sd-vae-ft-ema-original), [CLIPseg], [MiDaS](https://github.com/isl-org/MiDaS) models (mostly converted to `float16` for faster loading) by the command below. Licensing info is available on their webpages.
+Download Stable Diffusion ([1.5](https://huggingface.co/CompVis/stable-diffusion), [1.5-inpaint](https://huggingface.co/runwayml/stable-diffusion-inpainting), [2-inpaint](https://huggingface.co/stabilityai/stable-diffusion-2-inpainting), [2-depth](https://huggingface.co/stabilityai/stable-diffusion-2-depth), [2.1](https://huggingface.co/stabilityai/stable-diffusion-2-1-base), [2.1-v](https://huggingface.co/stabilityai/stable-diffusion-2-1), [OpenCLIP], [custom VAE](https://huggingface.co/stabilityai/sd-vae-ft-ema-original), [CLIPseg], [MiDaS](https://github.com/isl-org/MiDaS) models (mostly converted to `float16` for faster loading) by the command below. Licensing info is available on their webpages.
 ```
 python download.py
 ```
@@ -70,7 +72,7 @@ python src/latwalk.py -t yourfile.txt --size 1024-576
 python src/latwalk.py -t yourfile.txt -im _in/pix/bench2.jpg --mask _in/pix/mask/bench2_mask.jpg 
 ```
 Check other options by running these scripts with `--help` option; try various models, samplers, noisers, etc.  
-Text prompts may include either embeddings (e.g. `<depthmap>`) from [textual inversion] or weights (like `good prompt :1 | also good prompt :1 | bad prompt :-0.5`). The latter may degrade overall accuracy though.  
+Text prompts may include either special tokens (e.g. `<depthmap>`) or weights (like `good prompt :1 | also good prompt :1 | bad prompt :-0.5`). The latter may degrade overall accuracy though.  
 Interpolated videos may be further smoothed out with [FILM](https://github.com/google-research/frame-interpolation).  
 
 There are also Windows bat-files, slightly simplifying and automating the commands. 
